@@ -6,8 +6,6 @@ import Export from './Export.jsx';
 import { pickWinner, reelSequence } from '../draw/drawEngine.js';
 import { saveDrawSession, loadDrawSession, clearMatchState } from '../state/store.js';
 
-const POST_DRAW_LOCK_MS = 1000;
-
 export default function Draw({ match, initialEntrants, resume, onBackToMatches, onSignOut }) {
   // entrants: { id, name, part, club, state: ACTIVE | CLAIMED | NOT_PRESENT }
   const [entrants, setEntrants] = useState(() => {
@@ -30,11 +28,10 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
   const [reel, setReel] = useState([]);
   const [current, setCurrent] = useState(null); // winning entrant during landed
   const [spinId, setSpinId] = useState(0);
-  const [locked, setLocked] = useState(false);
   const [toast, setToast] = useState('');
   const [showExport, setShowExport] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const lockTimer = useRef(null);
+  const drawingRef = useRef(false); // guards against double-fire while spinning
 
   const active = useMemo(() => entrants.filter((e) => e.state === 'ACTIVE'), [entrants]);
   const remaining = active.length;
@@ -50,39 +47,55 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
     });
   }, [entrants, winners, drawNumber, match]);
 
-  useEffect(() => () => clearTimeout(lockTimer.current), []);
-
-  function startDraw() {
-    if (locked || phase !== 'idle' || remaining === 0) return;
-    const winner = pickWinner(active);
-    if (!winner) return;
+  // Spin the drum for a given active pool. Shared by the first Draw click and
+  // the chained next-draw after resolving a winner.
+  function beginDraw(pool) {
+    if (drawingRef.current) return;
+    const winner = pickWinner(pool);
+    if (!winner) {
+      setPhase('idle');
+      setCurrent(null);
+      return;
+    }
+    drawingRef.current = true;
     setCurrent(winner);
-    setReel(reelSequence(active, winner));
+    setReel(reelSequence(pool, winner));
     setPhase('spinning');
-    setLocked(true);
     setSpinId((n) => n + 1);
   }
 
+  function startDraw() {
+    if (phase !== 'idle' || remaining === 0) return;
+    beginDraw(active);
+  }
+
   function handleLanded() {
+    drawingRef.current = false;
     setPhase((p) => (p === 'spinning' ? 'landed' : p));
   }
 
+  // Record the outcome for the current winner AND immediately start the next
+  // draw (unless the pool is now empty). One tap per winner.
   function resolve(outcome) {
-    if (!current) return;
-    setEntrants((list) =>
-      list.map((e) => (e.id === current.id ? { ...e, state: outcome } : e))
+    if (!current || phase !== 'landed') return;
+    const resolvedId = current.id;
+    const nextEntrants = entrants.map((e) =>
+      e.id === resolvedId ? { ...e, state: outcome } : e
     );
+    setEntrants(nextEntrants);
     setWinners((list) => [
       ...list,
-      { drawNo: drawNumber, id: current.id, name: current.name, outcome },
+      { drawNo: drawNumber, id: resolvedId, name: current.name, outcome },
     ]);
     setDrawNumber((n) => n + 1);
-    setCurrent(null);
-    setPhase('idle');
-    // Brief lockout to prevent an accidental double-tap re-draw.
-    setLocked(true);
-    clearTimeout(lockTimer.current);
-    lockTimer.current = setTimeout(() => setLocked(false), POST_DRAW_LOCK_MS);
+
+    const stillActive = nextEntrants.filter((e) => e.state === 'ACTIVE');
+    if (stillActive.length > 0) {
+      beginDraw(stillActive); // chain straight into the next spin
+    } else {
+      setCurrent(null);
+      setPhase('idle'); // exhaustion view takes over
+    }
   }
 
   function reactivate(entry) {
@@ -100,6 +113,7 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
     setPhase('idle');
     setCurrent(null);
     setReel([]);
+    drawingRef.current = false;
   }
 
   function doReset() {
@@ -107,6 +121,9 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
     setConfirmReset(false);
     onBackToMatches();
   }
+
+  // After resolving the current winner, will any entrants remain?
+  const lastInPool = active.length <= 1;
 
   return (
     <div className="app">
@@ -148,11 +165,13 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
 
             {phase === 'landed' ? (
               <div className="draw-buttons">
-                <button className="btn btn-primary btn-lg" onClick={() => resolve('CLAIMED')}>
-                  Claimed — Next draw
+                <button className="btn btn-primary btn-lg draw-outcome" onClick={() => resolve('CLAIMED')}>
+                  <span>Claimed</span>
+                  <small>{lastInPool ? 'Finish' : 'Next draw'}</small>
                 </button>
-                <button className="btn btn-lg" onClick={() => resolve('NOT_PRESENT')}>
-                  Not present
+                <button className="btn btn-lg draw-outcome" onClick={() => resolve('NOT_PRESENT')}>
+                  <span>Not present</span>
+                  <small>{lastInPool ? 'Finish' : 'Next draw'}</small>
                 </button>
               </div>
             ) : (
@@ -160,7 +179,7 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
                 <div className="draw-buttons">
                   <button
                     className="btn btn-primary btn-lg btn-block"
-                    disabled={locked || phase !== 'idle' || remaining === 0}
+                    disabled={phase !== 'idle' || remaining === 0}
                     onClick={startDraw}
                   >
                     {phase === 'spinning' ? 'Drawing…' : 'Draw'}

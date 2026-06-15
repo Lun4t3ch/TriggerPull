@@ -548,6 +548,22 @@ a {
   flex: 1;
 }
 
+.draw-outcome {
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+.draw-outcome small {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .remaining {
   font-family: var(--font-mono);
   font-size: 16px;
