@@ -132,8 +132,13 @@ const STATUS_TITLES = new Set(['approved', 'pending', 'waiting list', 'deleted']
 const NAME_HREF = /\/event\/participant\/\d+\/\d+\/$/;
 
 function rowName(tr) {
+  // The row may contain several /event/participant/{x}/{id}/ links (a name link
+  // and an icon-only "view" link). Take the first one with actual text.
   for (const a of tr.querySelectorAll('a[href]')) {
-    if (NAME_HREF.test(a.getAttribute('href') || '')) return clean(a.textContent);
+    if (NAME_HREF.test(a.getAttribute('href') || '')) {
+      const t = clean(a.textContent);
+      if (t) return t;
+    }
   }
   return '';
 }
@@ -141,8 +146,21 @@ function rowName(tr) {
 function rowNameCell(tr) {
   for (const td of tr.querySelectorAll('td')) {
     for (const a of td.querySelectorAll('a[href]')) {
-      if (NAME_HREF.test(a.getAttribute('href') || '')) return td;
+      if (NAME_HREF.test(a.getAttribute('href') || '') && clean(a.textContent)) return td;
     }
+  }
+  return null;
+}
+
+// Participant id: the organizer view has a checkbox carrying it; the
+// competitor view (no checkboxes) exposes it only via the detail link
+// /event/participant/{x}/{id}/.
+function rowId(tr) {
+  const cb = tr.querySelector('input[name="competitor"]');
+  if (cb && cb.value) return cb.value;
+  for (const a of tr.querySelectorAll('a[href]')) {
+    const m = (a.getAttribute('href') || '').match(/\/event\/participant\/\d+\/(\d+)\/$/);
+    if (m) return m[1];
   }
   return null;
 }
@@ -187,8 +205,7 @@ export function parseParticipants(html) {
 
   const rows = d.querySelectorAll('#competitorTable tbody tr');
   rows.forEach((tr) => {
-    const checkbox = tr.querySelector('input[name="competitor"]');
-    const id = checkbox ? checkbox.value : null;
+    const id = rowId(tr);
     if (!id) return;
 
     const name = rowName(tr);
