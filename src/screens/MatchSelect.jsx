@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchMatchesHtml, ApiError } from '../api/client.js';
-import { parseMatches } from '../parsers/ssi.js';
+import { fetchMatchesHtml, fetchRegistrationsHtml, ApiError } from '../api/client.js';
+import { parseMatches, parseRegistrations } from '../parsers/ssi.js';
 import { getUsername } from '../state/store.js';
+
+const CREW_ONLY_KEY = 'tp.crewOnly';
+const loadCrewOnly = () => localStorage.getItem(CREW_ONLY_KEY) !== '0'; // default true
 
 export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
   const [year, setYear] = useState(null); // null = current year
@@ -9,15 +12,42 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [crewOnly, setCrewOnly] = useState(loadCrewOnly);
+
+  function toggleCrewOnly(value) {
+    setCrewOnly(value);
+    localStorage.setItem(CREW_ONLY_KEY, value ? '1' : '0');
+  }
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError('');
-    fetchMatchesHtml(year)
-      .then(({ html }) => {
+
+    const jobs = [fetchMatchesHtml(year).then((r) => parseMatches(r.html))];
+    if (!crewOnly) {
+      jobs.push(
+        fetchRegistrationsHtml(year)
+          .then((r) => parseRegistrations(r.html))
+          .catch(() => ({ matches: [], years: [], currentYear: null })) // non-fatal
+      );
+    }
+
+    Promise.all(jobs)
+      .then(([base, regs]) => {
         if (!alive) return;
-        setData(parseMatches(html));
+        if (!regs) return setData(base);
+
+        // Merge: organizer/staff matches win over competitor-only duplicates.
+        const byUrl = new Map();
+        base.matches.forEach((m) => byUrl.set(m.url, m));
+        regs.matches.forEach((m) => byUrl.has(m.url) || byUrl.set(m.url, m));
+
+        setData({
+          matches: [...byUrl.values()].sort((a, b) => b.timestamp - a.timestamp),
+          years: [...new Set([...base.years, ...regs.years])].sort((a, b) => b - a),
+          currentYear: base.currentYear,
+        });
       })
       .catch((err) => {
         if (!alive) return;
@@ -25,10 +55,11 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
         setError(err.message || 'Could not load your competitions.');
       })
       .finally(() => alive && setLoading(false));
+
     return () => {
       alive = false;
     };
-  }, [year, onExpired]);
+  }, [year, crewOnly, onExpired]);
 
   const matches = data?.matches || [];
   const years = data?.years || [];
@@ -38,9 +69,7 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
     const q = query.trim().toLowerCase();
     if (!q) return matches;
     return matches.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) ||
-        m.sport.toLowerCase().includes(q)
+      (m) => m.name.toLowerCase().includes(q) || m.sport.toLowerCase().includes(q)
     );
   }, [matches, query]);
 
@@ -66,6 +95,14 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <label className="checkrow" style={{ whiteSpace: 'nowrap' }}>
+            <input
+              type="checkbox"
+              checked={crewOnly}
+              onChange={(e) => toggleCrewOnly(e.target.checked)}
+            />
+            Only matches I crew or admin
+          </label>
         </div>
 
         {years.length > 0 && (
@@ -100,7 +137,8 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
         {!loading && !error && filtered.length === 0 && (
           <div className="card muted">
             No matches found. If you expect to see matches here, make sure you
-            are registered or listed as staff on SSI.
+            are registered or listed as staff on SSI
+            {crewOnly ? ', or switch off “Only matches I crew or admin”.' : '.'}
           </div>
         )}
 
@@ -111,9 +149,7 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
                 <div style={{ minWidth: 0 }}>
                   <div className="match-name">{m.name}</div>
                   <div className="match-meta">
-                    {m.dateText} · {m.sport}
-                    {m.role ? ` · ${m.role}` : ''}
-                    {m.status ? ` · ${m.status}` : ''}
+                    {[m.dateText, m.sport, m.role, m.status].filter(Boolean).join(' · ')}
                   </div>
                 </div>
                 {m.registered != null && (

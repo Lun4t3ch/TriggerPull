@@ -56,6 +56,11 @@ export function fetchMatchesHtml(year) {
   return request(`/api/matches${q}`);
 }
 
+export function fetchRegistrationsHtml(year) {
+  const q = year ? `?year=${encodeURIComponent(year)}` : '';
+  return request(`/api/registrations${q}`);
+}
+
 export function fetchParticipantsHtml(matchUrl) {
   return request(`/api/participants?matchUrl=${encodeURIComponent(matchUrl)}`);
 }

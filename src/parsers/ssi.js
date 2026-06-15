@@ -43,8 +43,8 @@ export function parseMatches(html) {
     const tsSpan = cells[0].querySelector('span');
     const ts = tsSpan ? parseInt(clean(tsSpan.textContent), 10) : 0;
 
-    // Visible date text sits after the hidden span.
-    const dateText = clean(cells[0].textContent);
+    // Visible date text sits after the hidden (sort) span.
+    const dateText = visibleText(cells[0]);
 
     // Strip the "premium" sup label from the event name.
     const nameClone = link.cloneNode(true);
@@ -100,6 +100,59 @@ function parseCurrentYear(d) {
   const title = clean(d.querySelector('title')?.textContent || '');
   const m = title.match(/(\d{4})/);
   return m ? parseInt(m[1], 10) : new Date().getFullYear();
+}
+
+// Visible cell text with any hidden (display:none sort) spans removed.
+function visibleText(cell) {
+  if (!cell) return '';
+  const c = cell.cloneNode(true);
+  c.querySelectorAll('span[style*="display:none"]').forEach((s) => s.remove());
+  return clean(c.textContent);
+}
+
+// Registrations the user is signed up for (/my-registrations/{year}/). Same
+// shape as parseMatches, with role 'competitor'. Matches the user both
+// organizes and competes in appear in both lists and are de-duped by the
+// caller. Multi-division registrations for the same event are collapsed here.
+export function parseRegistrations(html) {
+  const d = doc(html);
+  const byUrl = new Map();
+
+  d.querySelectorAll('#sortTable tbody tr').forEach((tr) => {
+    const cells = tr.querySelectorAll('td');
+    if (!cells.length) return;
+
+    const link = cells[0].querySelector('a[href^="/event/"]');
+    if (!link) return;
+    const url = normalizeEventUrl(link.getAttribute('href'));
+    const ids = url.match(/^\/event\/(\d+)\/(\d+)\//);
+    if (!ids || byUrl.has(url)) return;
+
+    const startsCell = cells[cells.length - 1];
+    const tsSpan = startsCell.querySelector('span');
+    const ts = tsSpan ? parseInt(clean(tsSpan.textContent), 10) : 0;
+
+    byUrl.set(url, {
+      source: SOURCE,
+      sportCode: ids[1],
+      id: ids[2],
+      url,
+      name: clean(link.textContent),
+      timestamp: Number.isFinite(ts) ? ts : 0,
+      dateText: visibleText(startsCell),
+      status: '',
+      sport: '',
+      role: 'competitor',
+      registered: null,
+      capacity: null,
+    });
+  });
+
+  return {
+    matches: [...byUrl.values()].sort((a, b) => b.timestamp - a.timestamp),
+    years: parseYears(d),
+    currentYear: parseCurrentYear(d),
+  };
 }
 
 // ---------------------------------------------------------------------------
