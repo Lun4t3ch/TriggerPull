@@ -1,10 +1,16 @@
 // POST /api/login  { username, password }  ->  { sessionid }  | { error }
 //
-// Two-step Django login:
-//   1. GET /login/        -> read csrfmiddlewaretoken (hidden field) + csrftoken cookie
-//   2. POST /login/       -> credentials + token; success returns a sessionid cookie
+// Observed SSI behaviour (verified against the live site):
+//   - GET /login/ returns a plain form with NO csrfmiddlewaretoken field and
+//     sets NO cookies. The endpoint is CSRF-exempt.
+//   - The form fields are: username (email), password, keep ("keep me logged
+//     in" checkbox). It posts to /login/?next=...
+//   - A *successful* login responds with a Set-Cookie: sessionid (302 redirect).
+//   - A *failed* login responds 200 with the form again and NO sessionid cookie.
 //
-// Credentials are used once to obtain the sessionid and are never stored.
+// So: post the credentials directly and treat "sessionid was set" as success.
+// We still best-effort pick up a csrftoken cookie / token if a future SSI
+// change reintroduces them, but their absence is not an error.
 
 import {
   SSI_ORIGIN,
@@ -29,35 +35,25 @@ export async function onRequestPost({ request }) {
     return json({ error: 'Username and password are required.' }, 400);
   }
 
-  // Step 1 — fetch the login form for the CSRF token + cookie.
-  let loginPage;
+  // Best-effort priming: grab any cookie/token SSI might set (currently none).
+  let cookieHeader = '';
+  let token = null;
   try {
-    loginPage = await ssiFetch('/login/', { method: 'GET' });
+    const page = await ssiFetch('/login/', { method: 'GET' });
+    const html = await page.text();
+    token = extractCsrfToken(html);
+    const csrftoken = findCookieAcross(getSetCookies(page.headers), 'csrftoken');
+    if (csrftoken) cookieHeader = `csrftoken=${csrftoken}`;
   } catch {
-    return json({ error: 'Could not reach Shoot’n Score It.' }, 502);
+    /* non-fatal — the login POST does not require a token */
   }
 
-  const pageHtml = await loginPage.text();
-  const csrftoken = findCookieAcross(getSetCookies(loginPage.headers), 'csrftoken');
-  const formToken = extractCsrfToken(pageHtml) || csrftoken;
-
-  if (!formToken) {
-    return json(
-      { error: 'Login is temporarily unavailable (no CSRF token).' },
-      502
-    );
-  }
-
-  // Step 2 — post the credentials. Django requires a matching csrftoken cookie
-  // and, over HTTPS, a same-origin Referer.
   const form = new URLSearchParams();
   form.set('username', username);
   form.set('password', password);
-  form.set('csrfmiddlewaretoken', formToken);
+  form.set('keep', 'on'); // request a durable session for scraping
   form.set('next', '/');
-
-  const cookieParts = [];
-  if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
+  if (token) form.set('csrfmiddlewaretoken', token);
 
   let postRes;
   try {
@@ -68,7 +64,7 @@ export async function onRequestPost({ request }) {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Referer': SSI_ORIGIN + '/login/',
         'Origin': SSI_ORIGIN,
-        ...(cookieParts.length ? { Cookie: cookieParts.join('; ') } : {}),
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       },
       body: form.toString(),
     });
@@ -77,20 +73,13 @@ export async function onRequestPost({ request }) {
   }
 
   const sessionid = findCookieAcross(getSetCookies(postRes.headers), 'sessionid');
-
-  // Success: SSI sets a sessionid cookie (usually with a 302 to "/"). On
-  // failure it returns 200 with the login page again and no sessionid.
   if (sessionid) {
     return json({ sessionid });
   }
 
-  return json(
-    { error: 'Login failed. Check your username and password.' },
-    401
-  );
+  return json({ error: 'Login failed. Check your username and password.' }, 401);
 }
 
-// Helpful response for accidental GETs.
 export function onRequestGet() {
   return json({ error: 'Use POST to sign in.' }, 405);
 }
