@@ -119,10 +119,65 @@ export function normalizeStatus(rawTitle) {
   return STATUS_MAP[key] || 'UNKNOWN';
 }
 
-function abbrTitle(cell) {
-  const abbr = cell?.querySelector('abbr');
-  if (abbr) return clean(abbr.getAttribute('title') || abbr.textContent);
-  return clean(cell?.textContent || '');
+// SSI's competitor table does NOT have a fixed column layout — depending on the
+// match config (pre-match on/off, classification on/off, paid on/off, etc.) the
+// columns shift. So we locate each field by its distinctive markup rather than
+// by a fixed cell index, which keeps parsing correct across very different
+// matches.
+
+const STATUS_TITLES = new Set(['approved', 'pending', 'waiting list', 'deleted']);
+
+// The participant's own detail link ends in /event/participant/{x}/{id}/ — the
+// action links (edit, delete, toggle-favourite) have extra path after the id.
+const NAME_HREF = /\/event\/participant\/\d+\/\d+\/$/;
+
+function rowName(tr) {
+  for (const a of tr.querySelectorAll('a[href]')) {
+    if (NAME_HREF.test(a.getAttribute('href') || '')) return clean(a.textContent);
+  }
+  return '';
+}
+
+function rowNameCell(tr) {
+  for (const td of tr.querySelectorAll('td')) {
+    for (const a of td.querySelectorAll('a[href]')) {
+      if (NAME_HREF.test(a.getAttribute('href') || '')) return td;
+    }
+  }
+  return null;
+}
+
+function rowStatusRaw(tr) {
+  // Preferred: the status toggle link's <abbr title="Approved|Pending|...">.
+  const a = tr.querySelector('a[href*="toggle-status"] abbr');
+  if (a) return clean(a.getAttribute('title') || a.textContent);
+  // Fallback: any abbr whose title is a recognised status.
+  for (const abbr of tr.querySelectorAll('abbr')) {
+    if (STATUS_TITLES.has(clean(abbr.getAttribute('title')).toLowerCase())) {
+      return clean(abbr.getAttribute('title'));
+    }
+  }
+  return '';
+}
+
+function rowPart(tr) {
+  for (const abbr of tr.querySelectorAll('abbr')) {
+    const t = clean(abbr.getAttribute('title')).toLowerCase();
+    if (t.includes('pre-match') || t.includes('pre match')) return 'PM';
+    if (t.includes('main-match') || t.includes('main match')) return 'MM';
+  }
+  return 'MM';
+}
+
+function rowMatchRole(tr) {
+  for (const abbr of tr.querySelectorAll('abbr')) {
+    const title = clean(abbr.getAttribute('title'));
+    if (/officer|director|quarter master|stats|chrono/i.test(title)) {
+      const m = title.match(/\(([A-Za-z]{2,4})\)/);
+      return m ? m[1] : clean(abbr.textContent);
+    }
+  }
+  return '';
 }
 
 // Returns { participants: [...], summaryText, counts: { accepted, pending, waitlisted, removed, total } }
@@ -132,43 +187,47 @@ export function parseParticipants(html) {
 
   const rows = d.querySelectorAll('#competitorTable tbody tr');
   rows.forEach((tr) => {
-    const cells = tr.querySelectorAll('td');
-    if (cells.length < 12) return;
-
-    const checkbox = cells[0].querySelector('input[name="competitor"]');
+    const checkbox = tr.querySelector('input[name="competitor"]');
     const id = checkbox ? checkbox.value : null;
     if (!id) return;
 
-    const tsSpan = cells[0].querySelector('span');
-    const regTimestamp = tsSpan ? parseInt(clean(tsSpan.textContent), 10) : 0;
-
-    const nameLink = cells[3].querySelector('a');
-    const name = clean(nameLink ? nameLink.textContent : cells[3].textContent);
+    const name = rowName(tr);
     if (!name) return;
 
-    const partTitle = abbrTitle(cells[10]).toLowerCase(); // "main-match" / "pre-match"
-    const part = partTitle.includes('pre') ? 'PM' : 'MM';
+    const tsSpan =
+      tr.querySelector('span[style*="display:none"]') || tr.querySelector('td span');
+    const regTimestamp = tsSpan ? parseInt(clean(tsSpan.textContent), 10) : 0;
 
-    const statusRaw = abbrTitle(cells[11]);
+    const statusRaw = rowStatusRaw(tr);
     const status = normalizeStatus(statusRaw);
 
-    const matchRole = abbrTitle(cells[13]); // -, RO, MD, QM ...
+    // Display-only metadata — best-effort and layout-tolerant.
+    const nTd = rowNameCell(tr);
+    const division = clean(nTd?.nextElementSibling?.textContent || '');
+    const squadLink = tr.querySelector('a[href*="/event/squad/"]');
+    const squad = squadLink ? clean(squadLink.textContent) : '';
+    const orgLink = tr.querySelector('a[href^="/organization/"]');
+    const club = orgLink ? clean(orgLink.textContent) : '';
+    const flagCell = [...tr.querySelectorAll('td')].find((td) => td.querySelector('.flag'));
+    const country = flagCell
+      ? clean(flagCell.querySelector('abbr')?.getAttribute('title') || '')
+      : '';
 
     participants.push({
       source: SOURCE,
       id,
       name,
       regTimestamp: Number.isFinite(regTimestamp) ? regTimestamp : 0,
-      number: clean(cells[2].textContent),
-      division: clean(cells[4].textContent),
-      category: abbrTitle(cells[5]),
-      squad: clean(cells[7].textContent),
-      club: clean(cells[8].textContent),
-      country: abbrTitle(cells[9]),
-      part, // 'MM' | 'PM'
+      number: '',
+      division,
+      category: '',
+      squad,
+      club,
+      country,
+      part: rowPart(tr), // 'MM' | 'PM'
       status, // ACCEPTED | PENDING | WAITLISTED | REMOVED | UNKNOWN
       statusRaw,
-      matchRole: matchRole && matchRole !== '-' ? matchRole : '',
+      matchRole: rowMatchRole(tr),
       manual: false,
     });
   });
