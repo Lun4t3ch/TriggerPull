@@ -98,6 +98,21 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
     }
   }
 
+  // "Not present" person showed up after all — mark them claimed in place,
+  // keeping their draw number. They are NOT returned to the pool.
+  function markClaimed(entry) {
+    setEntrants((list) =>
+      list.map((e) => (e.id === entry.id ? { ...e, state: 'CLAIMED' } : e))
+    );
+    setWinners((list) =>
+      list.map((w) =>
+        w.id === entry.id && w.drawNo === entry.drawNo ? { ...w, outcome: 'CLAIMED' } : w
+      )
+    );
+    setToast(`${entry.name} marked as claimed`);
+  }
+
+  // Put a "not present" winner back into the active pool to be drawn again.
   function reactivate(entry) {
     setEntrants((list) =>
       list.map((e) => (e.id === entry.id ? { ...e, state: 'ACTIVE' } : e))
@@ -203,13 +218,22 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
                       {w.outcome === 'CLAIMED' ? 'Claimed' : 'Not present'}
                     </span>
                     {w.outcome === 'NOT_PRESENT' && (
-                      <button
-                        className="btn btn-ghost"
-                        style={{ padding: '4px 9px', fontSize: 13 }}
-                        onClick={() => reactivate(w)}
-                      >
-                        Reactivate
-                      </button>
+                      <>
+                        <button
+                          className="btn btn-primary"
+                          style={{ padding: '4px 10px', fontSize: 13 }}
+                          onClick={() => markClaimed(w)}
+                        >
+                          Claim
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ padding: '4px 9px', fontSize: 13 }}
+                          onClick={() => reactivate(w)}
+                        >
+                          Reactivate
+                        </button>
+                      </>
                     )}
                   </div>
                 ))}
