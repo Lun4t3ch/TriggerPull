@@ -9,6 +9,7 @@ import {
   toParticipants,
   listId,
 } from '../parsers/file.js';
+import UploadHelp from '../components/UploadHelp.jsx';
 
 const PREVIEW = 8;
 
@@ -128,26 +129,7 @@ export default function Import({ onImported, onBack, backLabel }) {
 
         {error && <div className="error-msg" style={{ marginTop: 12 }}>{error}</div>}
 
-        <details className="help">
-          <summary>How does this work?</summary>
-          <ol>
-            <li>Choose your file or drop it above.</li>
-            <li>Check the preview. If needed, change the name column(s), swap first/last name with ⇄, or switch sheet.</li>
-            <li>Click <strong>Continue</strong>, untick or remove anyone who shouldn’t be in the draw, then <strong>Start draw</strong>.</li>
-          </ol>
-          <p><strong>Files:</strong> Excel (.xlsx, .xls), .ods, CSV, TSV or plain text.</p>
-          <p><strong>Layouts that work:</strong></p>
-          <ul>
-            <li>First and last name in separate columns, in either order</li>
-            <li>Full name in one column — <em>John Smith</em> or <em>Smith, John</em></li>
-            <li>One name per line in a text file</li>
-          </ul>
-          <p>
-            A header row (<em>Name</em>, <em>First Name</em>, <em>Last Name</em>, <em>Surname</em>,
-            <em> Competitor</em>…) helps but isn’t required. Other columns such as club, division,
-            email or start number are ignored, and title, empty and total rows are skipped.
-          </p>
-        </details>
+        <UploadHelp />
 
         {rows && (
           <>

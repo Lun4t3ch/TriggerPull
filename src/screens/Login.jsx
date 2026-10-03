@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { login } from '../api/client.js';
 import { saveSession } from '../state/store.js';
 import { ApiError } from '../api/client.js';
+import UploadHelp from '../components/UploadHelp.jsx';
 
 export default function Login({ initialMessage, onSignedIn, onUseFile }) {
   const [username, setUsername] = useState('');
@@ -104,6 +105,7 @@ export default function Login({ initialMessage, onSignedIn, onUseFile }) {
         <button type="button" className="btn btn-block btn-lg" onClick={onUseFile}>
           Upload a list
         </button>
+        <UploadHelp />
       </div>
     </div>
   );
