@@ -178,17 +178,18 @@ function firstNameHits(values) {
 // ---------------------------------------------------------------------------
 
 // Header cells that contain "name"/"navn" but are NOT a person's name.
-const NOT_PERSON = /klubb|club|lag\b|team|bruker|user|division|divisjon|kategori|category|event|stevne|match|org|firma|company|premie|prize|fil\b|file/i;
+const NOT_PERSON = /klubb|club|lag\b|team|bruker|user|division|divisjon|kategori|category|event|stevne|match|org|firma|company|premie|prize|fil\b|file|middle|mellom|nick|kallenavn/i;
 
 function headerKind(h) {
-  const t = clean(h).toLowerCase();
+  // "last_name", "Last-Name", "LastName" -> "last name"
+  const t = clean(String(h).replace(/[_.\-]+/g, ' ')).toLowerCase();
   if (!t || t.length > 40 || NOT_PERSON.test(t)) return null;
-  const first = /fornavn|first|given|forename/.test(t);
-  const last = /etternavn|surname|last ?name|family|^last$/.test(t);
+  const first = /fornavn|first|given|forename|christian name|^f ?name$/.test(t);
+  const last = /etternavn|surname|last ?name|family|^last$|^l ?name$/.test(t);
   if (first && last) return 'full'; // e.g. "Etternavn, fornavn" in one column
   if (first) return 'first';
   if (last) return 'last';
-  if (/navn|name|deltaker|participant|competitor|skytter|shooter|person|vinner|winner/.test(t)) return 'full';
+  if (/navn|name|deltaker|participant|competitor|skytter|shooter|person|vinner|winner|athlete|player|entrant|contestant|attendee|member|medlem|utøver/.test(t)) return 'full';
   return null;
 }
 
