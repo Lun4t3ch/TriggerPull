@@ -3,7 +3,7 @@ import { login } from '../api/client.js';
 import { saveSession } from '../state/store.js';
 import { ApiError } from '../api/client.js';
 
-export default function Login({ initialMessage, onSignedIn }) {
+export default function Login({ initialMessage, onSignedIn, onUseFile }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
@@ -92,6 +92,19 @@ export default function Login({ initialMessage, onSignedIn }) {
           session.
         </div>
       </form>
+
+      <div className="or-divider">or</div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0, fontSize: 21 }}>Use your own list</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          No Shoot’n Score It account needed — upload an Excel or CSV file with
+          the participants’ names.
+        </p>
+        <button type="button" className="btn btn-block btn-lg" onClick={onUseFile}>
+          Upload a list
+        </button>
+      </div>
     </div>
   );
 }

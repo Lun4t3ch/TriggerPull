@@ -101,6 +101,17 @@ No environment variables are required (see `.env.example`).
 
 ---
 
+## Upload a list (no SSI)
+
+From the sign-in page, **Use your own list → Upload a list** accepts an Excel
+file (.xlsx/.xls/.ods) or CSV/TSV/TXT and feeds the same review and draw. The
+file is parsed in the browser by [`src/parsers/file.js`](src/parsers/file.js):
+header and name columns (first/last name, or a single name column) are
+auto-detected, and the user can adjust columns and name order before
+continuing. Excel support (SheetJS) is lazy-loaded only when needed.
+
+---
+
 ## Adding another participant source (e.g. PractiScore)
 
 The draw engine ([`src/draw/`](src/draw)) and UI have **zero knowledge** of where

@@ -734,3 +734,93 @@ a {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* --- Upload a list ------------------------------------------------------ */
+
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+  color: var(--text-dim);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 110px;
+  padding: 18px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  text-align: center;
+  cursor: pointer;
+  word-break: break-word;
+  transition: border-color 0.15s;
+}
+
+.dropzone:hover,
+.dropzone.dragging {
+  border-color: var(--brass);
+}
+
+.import-cols {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.import-cols .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-cols .swap {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+}
+
+select.input {
+  cursor: pointer;
+}
+
+.import-preview {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+/* --- Skip animation ----------------------------------------------------- */
+
+.skip-toggle {
+  justify-content: center;
+  margin-top: 8px;
+  font-size: 14.5px;
+}
+
+.winner-reveal.instant {
+  animation: winnerPop 0.35s ease-out, winnerGlow 1.4s ease-in-out 0.35s infinite alternate;
+}
+
+@keyframes winnerPop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}

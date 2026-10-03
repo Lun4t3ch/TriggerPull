@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Drum from '../components/Drum.jsx';
 import Toast from '../components/Toast.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
@@ -6,23 +6,26 @@ import Export from './Export.jsx';
 import { pickWinner, reelSequence } from '../draw/drawEngine.js';
 import { saveDrawSession, loadDrawSession, clearMatchState } from '../state/store.js';
 
-export default function Draw({ match, initialEntrants, resume, onBackToMatches, onSignOut }) {
+const SKIP_KEY = 'tp.skipAnimation';
+
+function loadSkip() {
+  try {
+    return localStorage.getItem(SKIP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export default function Draw({ match, initialEntrants, resume, backLabel, onBackToMatches, onSignOut }) {
+  // Read the saved session once (only when resuming).
+  const [saved] = useState(() => (resume ? loadDrawSession(match.id) : null));
   // entrants: { id, name, part, club, state: ACTIVE | CLAIMED | NOT_PRESENT }
-  const [entrants, setEntrants] = useState(() => {
-    if (resume) {
-      const saved = loadDrawSession(match.id);
-      if (saved?.entrants) return saved.entrants;
-    }
-    return (initialEntrants || []).map((e) => ({ ...e, state: 'ACTIVE' }));
-  });
-  const [winners, setWinners] = useState(() => {
-    if (resume) return loadDrawSession(match.id)?.winners || [];
-    return [];
-  });
-  const [drawNumber, setDrawNumber] = useState(() => {
-    if (resume) return loadDrawSession(match.id)?.drawNumber || 1;
-    return 1;
-  });
+  const [entrants, setEntrants] = useState(
+    () => saved?.entrants || (initialEntrants || []).map((e) => ({ ...e, state: 'ACTIVE' }))
+  );
+  const [winners, setWinners] = useState(() => saved?.winners || []);
+  const [drawNumber, setDrawNumber] = useState(() => saved?.drawNumber || 1);
+  const [skipAnimation, setSkipAnimation] = useState(loadSkip);
 
   const [phase, setPhase] = useState('idle'); // idle | spinning | landed
   const [reel, setReel] = useState([]);
@@ -32,6 +35,16 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
   const [showExport, setShowExport] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const drawingRef = useRef(false); // guards against double-fire while spinning
+  const clearToast = useCallback(() => setToast(''), []);
+
+  function toggleSkip(value) {
+    setSkipAnimation(value);
+    try {
+      localStorage.setItem(SKIP_KEY, value ? '1' : '0');
+    } catch {
+      /* preference just won't stick */
+    }
+  }
 
   const active = useMemo(() => entrants.filter((e) => e.state === 'ACTIVE'), [entrants]);
   const remaining = active.length;
@@ -40,7 +53,14 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
   // Persist after every meaningful change.
   useEffect(() => {
     saveDrawSession(match.id, {
-      match: { id: match.id, name: match.name, url: match.url, dateText: match.dateText, sport: match.sport },
+      match: {
+        id: match.id,
+        name: match.name,
+        url: match.url,
+        dateText: match.dateText,
+        sport: match.sport,
+        source: match.source,
+      },
       entrants,
       winners,
       drawNumber,
@@ -57,11 +77,17 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
       setCurrent(null);
       return;
     }
-    drawingRef.current = true;
     setCurrent(winner);
+    setSpinId((n) => n + 1);
+    if (skipAnimation) {
+      // Straight to the result — no reel, no spin.
+      setReel([]);
+      setPhase('landed');
+      return;
+    }
+    drawingRef.current = true;
     setReel(reelSequence(pool, winner));
     setPhase('spinning');
-    setSpinId((n) => n + 1);
   }
 
   function startDraw() {
@@ -172,11 +198,21 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
                 phase={phase}
                 winnerName={current?.name}
                 spinId={spinId}
+                instant={skipAnimation}
                 onLanded={handleLanded}
               />
             )}
 
             <div className="draw-label">Draw #{drawNumber}</div>
+
+            <label className="checkrow skip-toggle">
+              <input
+                type="checkbox"
+                checked={skipAnimation}
+                onChange={(e) => toggleSkip(e.target.checked)}
+              />
+              Skip draw animation
+            </label>
 
             {phase === 'landed' ? (
               <div className="draw-buttons">
@@ -243,12 +279,14 @@ export default function Draw({ match, initialEntrants, resume, onBackToMatches, 
         </div>
 
         <div style={{ marginTop: 24 }}>
-          <button className="btn btn-ghost" onClick={onBackToMatches}>Back to matches</button>
-          <button className="btn btn-ghost" onClick={onSignOut} style={{ marginLeft: 8 }}>Sign out</button>
+          <button className="btn btn-ghost" onClick={onBackToMatches}>{backLabel || 'Back to matches'}</button>
+          {onSignOut && (
+            <button className="btn btn-ghost" onClick={onSignOut} style={{ marginLeft: 8 }}>Sign out</button>
+          )}
         </div>
       </div>
 
-      <Toast message={toast} onDone={() => setToast('')} />
+      <Toast message={toast} onDone={clearToast} />
 
       {showExport && (
         <Export matchName={match.name} winners={winners} onBack={() => setShowExport(false)} />

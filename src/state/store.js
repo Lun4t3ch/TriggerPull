@@ -80,13 +80,14 @@ export function clearDrawSession(matchId) {
 
 // Find the most recently updated in-progress draw session for the resume
 // prompt. "In progress" = at least one draw completed and entrants remain.
-export function findResumableDraw() {
+export function findResumableDraw(accept = () => true) {
   let best = null;
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key || !key.startsWith('tp.draw.')) continue;
     const data = safeParse(localStorage.getItem(key));
     if (!data || !Array.isArray(data.winners) || data.winners.length === 0) continue;
+    if (!accept(data)) continue;
     if (!best || (data.updatedAt || 0) > (best.updatedAt || 0)) best = data;
   }
   return best;

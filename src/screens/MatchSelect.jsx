@@ -6,13 +6,14 @@ import { getUsername } from '../state/store.js';
 const CREW_ONLY_KEY = 'tp.crewOnly';
 const loadCrewOnly = () => localStorage.getItem(CREW_ONLY_KEY) !== '0'; // default true
 
-export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
+export default function MatchSelect({ onSelect, onSignOut, onExpired, onUseFile }) {
   const [year, setYear] = useState(null); // null = current year
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [crewOnly, setCrewOnly] = useState(loadCrewOnly);
+  const [reloadKey, setReloadKey] = useState(0);
 
   function toggleCrewOnly(value) {
     setCrewOnly(value);
@@ -59,7 +60,7 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
     return () => {
       alive = false;
     };
-  }, [year, crewOnly, onExpired]);
+  }, [year, crewOnly, reloadKey, onExpired]);
 
   const matches = data?.matches || [];
   const years = data?.years || [];
@@ -86,7 +87,10 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
       </div>
 
       <div className="container">
-        <h2 style={{ marginTop: 0 }}>Choose a competition</h2>
+        <div className="review-head">
+          <h2 style={{ margin: 0 }}>Choose a competition</h2>
+          <button className="btn btn-ghost" onClick={onUseFile}>Upload a list instead</button>
+        </div>
 
         <div className="toolbar">
           <input
@@ -128,7 +132,7 @@ export default function MatchSelect({ onSelect, onSignOut, onExpired }) {
         {error && !loading && (
           <div className="card">
             <div className="error-msg">{error}</div>
-            <button className="btn" style={{ marginTop: 12 }} onClick={() => setYear((y) => y)}>
+            <button className="btn" style={{ marginTop: 12 }} onClick={() => setReloadKey((k) => k + 1)}>
               Retry
             </button>
           </div>

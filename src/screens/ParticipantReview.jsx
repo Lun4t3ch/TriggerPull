@@ -11,7 +11,15 @@ function defaultIncluded(p) {
   return p.status === 'ACCEPTED';
 }
 
-export default function ParticipantReview({ match, onStartDraw, onBack, onSignOut, onExpired }) {
+export default function ParticipantReview({
+  match,
+  initialParticipants,
+  onStartDraw,
+  onBack,
+  onSignOut,
+  onExpired,
+}) {
+  const fromFile = match.source === 'file';
   const [participants, setParticipants] = useState(null);
   const [summaryText, setSummaryText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,6 +36,11 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
     if (saved && Array.isArray(saved.participants)) {
       setParticipants(saved.participants);
       setSummaryText(saved.summaryText || '');
+      setLoading(false);
+      return;
+    }
+    if (fromFile) {
+      setParticipants((initialParticipants || []).map((p) => ({ ...p, included: true })));
       setLoading(false);
       return;
     }
@@ -49,7 +62,9 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
     return () => {
       alive = false;
     };
-  }, [match.id, match.url, onExpired]);
+    // initialParticipants is fixed for a given file match id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.id, match.url, fromFile, onExpired]);
 
   // Persist whenever the list changes.
   useEffect(() => {
@@ -103,6 +118,7 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
     setNewName('');
   }
 
+  // Manual entries (and, for uploaded lists, any row) can be removed outright.
   function removeManual(id) {
     setParticipants((list) => list.filter((p) => p.id !== id));
   }
@@ -127,11 +143,11 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
           <div className="topbar-title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {match.name}
           </div>
-          <div className="topbar-sub">{match.dateText} · {match.sport}</div>
+          <div className="topbar-sub">{[match.dateText, match.sport].filter(Boolean).join(' · ')}</div>
         </div>
         <div className="row-gap">
           <button className="btn btn-ghost" onClick={onBack}>Back</button>
-          <button className="btn btn-ghost" onClick={onSignOut}>Sign out</button>
+          {onSignOut && <button className="btn btn-ghost" onClick={onSignOut}>Sign out</button>}
         </div>
       </div>
 
@@ -151,7 +167,7 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
                 <h2 style={{ margin: '0 0 4px' }}>Review participants</h2>
                 {summaryText && <div className="summary-line">{summaryText}</div>}
               </div>
-              <div className="filter-tabs">
+              {!fromFile && <div className="filter-tabs">
                 {[
                   ['ALL', 'All'],
                   ['MM', 'Main-match'],
@@ -165,7 +181,7 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
                     {label}
                   </button>
                 ))}
-              </div>
+              </div>}
             </div>
 
             <div className="toolbar">
@@ -200,8 +216,8 @@ export default function ParticipantReview({ match, onStartDraw, onBack, onSignOu
                   <div className="badges">
                     {p.part && !p.manual && <span className="badge badge-part">{p.part}</span>}
                     {p.matchRole && <span className="badge badge-role">{p.matchRole}</span>}
-                    <StatusBadge status={p.status} raw={p.statusRaw} />
-                    {p.manual && (
+                    {(!fromFile || p.manual) && <StatusBadge status={p.status} raw={p.statusRaw} />}
+                    {(p.manual || fromFile) && (
                       <button
                         type="button"
                         className="btn btn-ghost"

@@ -10,7 +10,7 @@ function offsetFor(i) {
 }
 
 // phase: 'idle' | 'spinning' | 'landed'
-export default function Drum({ cells, phase, winnerName, spinId, onLanded }) {
+export default function Drum({ cells, phase, winnerName, spinId, instant, onLanded }) {
   const stripRef = useRef(null);
   const [transform, setTransform] = useState(offsetFor(0));
   const [transition, setTransition] = useState('none');
@@ -59,7 +59,9 @@ export default function Drum({ cells, phase, winnerName, spinId, onLanded }) {
       )}
 
       {phase === 'landed' && winnerName && (
-        <div className="winner-reveal">{winnerName}</div>
+        // Keyed by spin so the reveal animation replays for every winner, even
+        // when skipping straight from one result to the next.
+        <div key={spinId} className={`winner-reveal ${instant ? 'instant' : ''}`}>{winnerName}</div>
       )}
 
       {phase !== 'idle' && (

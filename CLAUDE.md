@@ -22,9 +22,22 @@ then runs a slot-machine style draw. Flow:
 
 ```
 LOGIN → MATCH SELECT → PARTICIPANT REVIEW ("wash") → DRAW ↔ EXPORT
+  └──→ UPLOAD A LIST ──┘   (no SSI account needed)
 ```
 
-- **Login** — SSI email + password, privacy disclaimer, remember-me.
+- **Login** — SSI email + password, privacy disclaimer, remember-me. Below it,
+  **"Use your own list"** opens the file upload (also reachable from Match
+  select via "Upload a list instead").
+- **Upload a list** (`screens/Import.jsx`) — Excel (.xlsx/.xls/.ods) or CSV/TSV/
+  TXT, read entirely in the browser. Detection is forgiving (see the header of
+  `parsers/file.js`): header may sit below title rows or be missing; first/last
+  in either order or one cell ("Last, First" → "First Last"); without a header a
+  common-first-names list decides the order; picks the sheet with most names;
+  skips numbers/e-mails/totals/repeated headers; ALL CAPS → Title Case. The user
+  can switch sheet, pick column(s), swap order and toggle the header, with a
+  live preview.
+  Continues into the same review + draw as an SSI match (`match.source = 'file'`):
+  no MM/PM filter or SSI status badges, and every row can be removed.
 - **Match select** — the user's competitions (newest first), year navigation,
   client-side search, and a toggle **"Only matches I crew or admin"** (on =
   matches you organize/staff; off = also matches you only compete in).
@@ -33,7 +46,8 @@ LOGIN → MATCH SELECT → PARTICIPANT REVIEW ("wash") → DRAW ↔ EXPORT
   excluded but addable. MM/PM filter, manual add, select/deselect all.
 - **Draw** — tap **Draw** once; after the drum lands, **Claimed** or
   **Not present** each record the outcome *and* immediately spin the next draw
-  (one tap per winner). No-shows can be **Reactivated** (back to pool) or
+  (one tap per winner). **"Skip draw animation"** (remembered per device in
+  `tp.skipAnimation`) shows each winner instantly instead of spinning. No-shows can be **Reactivated** (back to pool) or
   **Claimed** in place if they turn up. **Start new round** when the pool is
   exhausted.
 - **Export** — overlay reachable any time; copy as TSV or download CSV.
@@ -78,10 +92,11 @@ TriggerPull/
     ├── api/client.js       frontend fetch wrapper (sends X-SSI-Session header)
     ├── parsers/
     │   ├── ssi.js          ALL SSI HTML parsing lives here (the only SSI-aware module)
+    │   ├── file.js         uploaded Excel/CSV -> names (column detection, CSV parser)
     │   └── practiscore.js  stub for a future drop-in source (see §7)
     ├── draw/drawEngine.js  source-agnostic winner pick + reel builder
     ├── state/store.js      localStorage/sessionStorage persistence + resume
-    ├── screens/            Login, MatchSelect, ParticipantReview, Draw, Export
+    ├── screens/            Login, MatchSelect, Import, ParticipantReview, Draw, Export
     ├── components/         Drum, StatusBadge, Toast, ConfirmDialog
     └── styles/theme.css    the whole theme
 ```
@@ -134,22 +149,29 @@ TriggerPull/
   drum reel ends on the predetermined winner. The Draw screen owns the round
   state and persists it.
 
+- **File source** (`src/parsers/file.js`): Excel is read with **SheetJS**
+  (`xlsx`, installed from the official `cdn.sheetjs.com` tarball — the npm
+  registry copy is outdated) and **dynamically imported**, so it is a separate
+  chunk that only loads when someone uploads a spreadsheet. CSV is parsed
+  in-house: delimiter auto-detected (`;` from Norwegian Excel, `,`, tab, or
+  Excel's `sep=` line), UTF-8 with Windows-1252 fallback so æøå survive. A file
+  list's match id is a hash of file name + names, so re-uploading the same file
+  resumes its saved review/draw state. Signed out, the resume prompt only offers
+  file-based draws.
+
 - **PractiScore was investigated and shelved** — see §7.
 
 ---
 
 ## 5. Run / build / deploy
 
-**Important env note (this machine):** Node is installed at
-`C:\Program Files\nodejs` but is **not on the tool's default PATH**. In the
-**PowerShell** tool, prepend it first:
-```powershell
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-```
-The **Bash** tool does NOT see Node — use PowerShell for npm/node work.
+**Env note:** the project now lives on a **Mac** (OneDrive folder
+`WibeCode/TriggerPull`). Node v22 is at `~/.local/node/bin` and is **not** on
+the default PATH — prefix commands with `export PATH=~/.local/node/bin:$PATH;`.
+`gh` CLI is installed and authenticated as `Lun4t3ch`.
 
 - **Local dev (UI + the /api proxy together):**
-  ```powershell
+  ```bash
   npm install
   npx wrangler pages dev -- npm run dev
   ```
@@ -164,13 +186,10 @@ The **Bash** tool does NOT see Node — use PowerShell for npm/node work.
 - **Push to `main` → Cloudflare auto-builds and deploys.** That is the entire
   deploy step.
 
-**Git for this project** (gh CLI is **NOT** installed; use Git directly):
+**Git for this project:**
 - Repo: **GitHub `Lun4t3ch/TriggerPull`**, default branch `main`.
-- Auth: **Git Credential Manager** (system helper `manager`) holds the GitHub
-  login, so HTTPS pushes succeed non-interactively. (Repo was created via the
-  GitHub API using the token GCM stored — `gh` is unavailable.)
-- Commit + push on the owner's behalf when he approves. End commit messages with:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- Commit + push on the owner's behalf when he approves. End commit messages
+  with the Co-Authored-By line for the current Claude model.
 
 ---
 
@@ -180,7 +199,8 @@ Live on triggerpull.org, used with real IPSC matches. Working: SSI login,
 match list (My Competitions + optional Registrations toggle), participant review
 with MM/PM filter + manual add, the slot-machine draw with one-tap
 Claimed/Not-present chaining, Claim-in-place + Reactivate for no-shows, new
-round, CSV/TSV export, resume after refresh, long-name handling in the drum.
+round, CSV/TSV export, resume after refresh, long-name handling in the drum,
+**upload-a-list (Excel/CSV) as an alternative to SSI**, skip-animation toggle.
 
 ---
 
@@ -206,7 +226,8 @@ round, CSV/TSV export, resume after refresh, long-name handling in the drum.
 
 ## 8. Next steps / ideas (not started)
 
-- **PractiScore via paste-import** — a "Paste a list" source that accepts a
+- **Paste a list** — a textarea alternative to the file upload (would reuse
+  `parsers/file.js`); also the route for PractiScore. Originally: a "Paste a list" source that accepts a
   pasted roster (or plain names, one per line) and feeds the same draw. Sidesteps
   all of PractiScore's anti-bot blocking. Universal across any source.
 - **More export options / themes**, sound effects on the reveal, etc.
